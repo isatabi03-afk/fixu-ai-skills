@@ -372,7 +372,20 @@ def connect_steps(page, source, target):
     )
 
 
-def generate_dap(nombre_proceso, pasos, output_dir, filename=None, _tipo="DAP"):
+def _open_file(path):
+    """Abre el archivo con la aplicacion por defecto del sistema operativo."""
+    import platform
+    import subprocess
+    system = platform.system()
+    if system == "Windows":
+        os.startfile(path)
+    elif system == "Darwin":
+        subprocess.Popen(["open", path])
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+
+def generate_dap(nombre_proceso, pasos, output_dir, filename=None, _tipo="DAP", auto_open=False):
     """
     Genera un DAP completo con simbologia ASME y lo guarda como .drawio.
 
@@ -385,6 +398,7 @@ def generate_dap(nombre_proceso, pasos, output_dir, filename=None, _tipo="DAP"):
         output_dir:     str — directorio donde guardar el archivo
         filename:       str | None — nombre del archivo sin extension
         _tipo:          str — "DAP" o "DOP" (prefijo del titulo)
+        auto_open:      bool — abrir el archivo con draw.io al terminar
 
     Returns:
         str — ruta completa del archivo .drawio generado
@@ -417,10 +431,13 @@ def generate_dap(nombre_proceso, pasos, output_dir, filename=None, _tipo="DAP"):
     _leyenda(page, pasos, y_final)
 
     file.write()
-    return os.path.join(output_dir, file.file_name)
+    out_path = os.path.join(output_dir, file.file_name)
+    if auto_open:
+        _open_file(out_path)
+    return out_path
 
 
-def generate_dop(nombre_producto, materiales, operaciones, output_dir, filename=None):
+def generate_dop(nombre_producto, materiales, operaciones, output_dir, filename=None, auto_open=False):
     """
     Genera un DOP (Diagrama de Operaciones del Proceso).
     Solo incluye Operaciones (O), Inspecciones (□) y Combinadas (O+□).
@@ -450,6 +467,7 @@ def generate_dop(nombre_producto, materiales, operaciones, output_dir, filename=
         output_dir=output_dir,
         filename=filename or f"DOP_{nombre_producto.replace(' ', '_')}",
         _tipo="DOP",
+        auto_open=auto_open,
     )
 
 
