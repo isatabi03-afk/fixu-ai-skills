@@ -20,7 +20,7 @@ import drawpyo
 import drawpyo.diagram
 
 # ---------------------------------------------------------------------------
-# Constantes de layout
+# Constantes de layout — diagrama principal
 # ---------------------------------------------------------------------------
 COL_TIEMPO   = 130   # x de la columna "Tiempo"
 COL_SIMBOLO  = 300   # x centro de la columna de simbolos ASME
@@ -30,6 +30,12 @@ ROW_MARGIN   = 80    # margen superior (primer paso)
 HEADER_Y     = 30    # y del encabezado
 NUM_OFFSET   = 42    # px por encima del centro del simbolo para el numero de paso
 
+# Constantes de layout — leyenda
+LEY_SYM_SIZE = 28    # tamano del simbolo en la leyenda
+LEY_ITEM_W   = 115   # ancho de cada item (simbolo + texto)
+LEY_ROW_H    = 55    # altura de la fila de simbolos en la leyenda
+LEY_Y_OFFSET = 45    # gap entre ultimo paso y caja de leyenda
+
 COLORES_TIPO = {
     "operacion":      "#DAE8FC",   # azul claro
     "transporte":     "#D5E8D4",   # verde claro
@@ -37,6 +43,15 @@ COLORES_TIPO = {
     "demora":         "#FFE6CC",   # naranja claro
     "almacenamiento": "#E1D5E7",   # violeta claro
     "op_insp":        "#F8CECC",   # rojo claro
+}
+
+NOMBRES_TIPO = {
+    "operacion":      "Operacion",
+    "inspeccion":     "Inspeccion",
+    "op_insp":        "Op. + Insp.",
+    "transporte":     "Transporte",
+    "demora":         "Demora",
+    "almacenamiento": "Almacenamiento",
 }
 
 # ---------------------------------------------------------------------------
@@ -165,6 +180,146 @@ _BUILDERS = {
 }
 
 # ---------------------------------------------------------------------------
+# Leyenda visual
+# ---------------------------------------------------------------------------
+
+def _draw_leyenda_symbol(page, tipo, cx, cy):
+    """Dibuja un simbolo ASME pequeno en la posicion (cx, cy) para la leyenda."""
+    color = COLORES_TIPO.get(tipo, "#ffffff")
+    s = LEY_SYM_SIZE
+
+    if tipo == "operacion":
+        obj = drawpyo.diagram.object_from_library(
+            library="general", obj_name="circle",
+            fillColor=color, strokeColor="#000000",
+            width=s, height=s
+        )
+        obj.page = page
+        obj.center_position = (cx, cy)
+
+    elif tipo == "inspeccion":
+        obj = drawpyo.diagram.object_from_library(
+            library="general", obj_name="square",
+            fillColor=color, strokeColor="#000000",
+            width=s, height=s
+        )
+        obj.page = page
+        obj.center_position = (cx, cy)
+
+    elif tipo == "transporte":
+        obj = drawpyo.diagram.Object(page=page, value="")
+        obj.apply_style_string(
+            f"shape=singleArrow;whiteSpace=wrap;html=1;"
+            f"fillColor={color};strokeColor=#000000;"
+            f"arrowWidth=0.4;arrowSize=0.35;"
+        )
+        obj.width = int(s * 1.5)
+        obj.height = int(s * 0.75)
+        obj.center_position = (cx, cy)
+
+    elif tipo == "demora":
+        obj = drawpyo.diagram.object_from_library(
+            library="flowchart", obj_name="delay",
+            fillColor=color, strokeColor="#000000",
+            width=int(s * 1.5), height=s
+        )
+        obj.page = page
+        obj.center_position = (cx, cy)
+
+    elif tipo == "almacenamiento":
+        obj = drawpyo.diagram.Object(page=page, value="")
+        obj.apply_style_string(
+            f"triangle;whiteSpace=wrap;html=1;"
+            f"direction=south;fillColor={color};strokeColor=#000000;"
+        )
+        obj.width = s
+        obj.height = s
+        obj.center_position = (cx, cy)
+
+    elif tipo == "op_insp":
+        obj = drawpyo.diagram.Object(page=page, value="")
+        obj.apply_style_string(
+            f"ellipse;whiteSpace=wrap;html=1;"
+            f"fillColor={color};strokeColor=#000000;"
+        )
+        obj.width = s
+        obj.height = s
+        obj.center_position = (cx, cy)
+
+
+def _leyenda(page, pasos, y_final):
+    """
+    Dibuja la leyenda visual con simbolos ASME, nombres y conteos.
+    Reemplaza al cuadro de resumen textual.
+    """
+    # Conteo por tipo
+    conteo = {t: 0 for t in _BUILDERS}
+    total_tiempo = 0.0
+    for p in pasos:
+        t = p.get("tipo", "").lower().strip()
+        if t in conteo:
+            conteo[t] += 1
+        total_tiempo += p.get("tiempo_min") or 0
+
+    # Solo tipos que aparecen en el diagrama, en orden canonico
+    orden = ["operacion", "inspeccion", "op_insp", "transporte", "demora", "almacenamiento"]
+    tipos_usados = [(t, NOMBRES_TIPO[t]) for t in orden if conteo[t] > 0]
+    if not tipos_usados:
+        return
+
+    n = len(tipos_usados)
+    total_w = n * LEY_ITEM_W + 20
+    # Centrar la leyenda respecto a COL_SIMBOLO
+    x0 = COL_SIMBOLO - total_w // 2
+
+    ley_top = y_final + LEY_Y_OFFSET
+    sym_y   = ley_top + 38          # y del centro de los simbolos
+    label_y = sym_y + LEY_SYM_SIZE  # y del texto debajo del simbolo
+
+    # Caja contenedora
+    caja = drawpyo.diagram.Object(page=page, value="")
+    caja.apply_style_string(
+        "whiteSpace=wrap;html=1;"
+        "fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;"
+    )
+    caja.width  = total_w
+    caja.height = LEY_ROW_H + 65
+    caja.position = (x0, ley_top)
+
+    # Titulo "LEYENDA"
+    _text(page, "<b>LEYENDA</b>",
+          x0 + total_w // 2, ley_top + 14,
+          w=120, h=22, bold=True)
+
+    # Linea separadora (visual — texto vacio con borde inferior simulado)
+    sep = drawpyo.diagram.Object(page=page, value="")
+    sep.apply_style_string(
+        "text;html=1;strokeColor=#666666;fillColor=none;"
+        "align=center;verticalAlign=middle;"
+    )
+    sep.width  = total_w - 10
+    sep.height = 1
+    sep.position = (x0 + 5, ley_top + 28)
+
+    # Items: simbolo + nombre (cantidad)
+    for i, (tipo, nombre) in enumerate(tipos_usados):
+        cx = x0 + i * LEY_ITEM_W + LEY_ITEM_W // 2
+
+        # Simbolo ASME pequeno
+        _draw_leyenda_symbol(page, tipo, cx, sym_y)
+
+        # Texto: "Nombre (N)"
+        label = f"{nombre} ({conteo[tipo]})"
+        _text(page, label, cx, label_y + 14, w=LEY_ITEM_W - 8, h=26, align="center")
+
+    # Tiempo total centrado al pie de la caja
+    total_str = f"Tiempo total: {round(total_tiempo, 2)} min"
+    _text(page, total_str,
+          x0 + total_w // 2, ley_top + LEY_ROW_H + 50,
+          w=total_w - 10, h=22, align="center")
+
+
+# ---------------------------------------------------------------------------
 # API publica
 # ---------------------------------------------------------------------------
 
@@ -201,7 +356,7 @@ def add_step(page, row_n, tipo, descripcion, tiempo_min=None):
 
     # Tiempo
     if tiempo_min is not None:
-        _text(page, str(tiempo_min), COL_TIEMPO, y, w=100)
+        _text(page, str(round(tiempo_min, 2)), COL_TIEMPO, y, w=100)
 
     return nodo
 
@@ -217,44 +372,6 @@ def connect_steps(page, source, target):
     )
 
 
-def _resumen(page, pasos, y_final):
-    """Agrega cuadro de resumen de totales al final del diagrama."""
-    conteo = {t: 0 for t in _BUILDERS}
-    total_tiempo = 0
-
-    for p in pasos:
-        t = p.get("tipo", "").lower().strip()
-        if t in conteo:
-            conteo[t] += 1
-        total_tiempo += p.get("tiempo_min") or 0
-
-    simbolos = {
-        "operacion":      "O",
-        "transporte":     "=>",
-        "inspeccion":     "□",
-        "demora":         "D",
-        "almacenamiento": "▽",
-        "op_insp":        "O+□",
-    }
-
-    lines = ["<b>RESUMEN</b>"]
-    for tipo, sym in simbolos.items():
-        if conteo[tipo] > 0:
-            lines.append(f"{sym} {tipo.capitalize()}: {conteo[tipo]}")
-    lines.append(f"Tiempo total: {total_tiempo} min")
-
-    resumen = drawpyo.diagram.Object(
-        page=page, value="<br>".join(lines)
-    )
-    resumen.apply_style_string(
-        "whiteSpace=wrap;html=1;align=left;verticalAlign=top;"
-        "fillColor=#f5f5f5;strokeColor=#666666;fontColor=#333333;"
-    )
-    resumen.width = 220
-    resumen.height = 30 + len(lines) * 18
-    resumen.position = (COL_SIMBOLO + 120, y_final + 20)
-
-
 def generate_dap(nombre_proceso, pasos, output_dir, filename=None, _tipo="DAP"):
     """
     Genera un DAP completo con simbologia ASME y lo guarda como .drawio.
@@ -267,6 +384,7 @@ def generate_dap(nombre_proceso, pasos, output_dir, filename=None, _tipo="DAP"):
                           tiempo_min  (float, opcional)
         output_dir:     str — directorio donde guardar el archivo
         filename:       str | None — nombre del archivo sin extension
+        _tipo:          str — "DAP" o "DOP" (prefijo del titulo)
 
     Returns:
         str — ruta completa del archivo .drawio generado
@@ -296,7 +414,7 @@ def generate_dap(nombre_proceso, pasos, output_dir, filename=None, _tipo="DAP"):
             connect_steps(page, nodos[i - 1], nodos[i])
 
     y_final = ROW_MARGIN + HEADER_Y + 60 + ROW_HEIGHT * len(pasos)
-    _resumen(page, pasos, y_final)
+    _leyenda(page, pasos, y_final)
 
     file.write()
     return os.path.join(output_dir, file.file_name)
